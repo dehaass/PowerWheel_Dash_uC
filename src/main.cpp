@@ -9,15 +9,21 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <elapsedMillis.h>
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pSensorCharacteristic = NULL;
 BLECharacteristic* pLedCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
-uint32_t value = 0;
 
-const int ledPin = 2; // Use the appropriate GPIO pin for your setup
+
+uint32_t value = 0;
+const int builtInLED = 8;
+const int buttonPin = 4;
+const int RED_LED = 3;
+const int YELLOW_LED = 2;
+const int GREEN_LED = 1;
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
@@ -45,18 +51,15 @@ class MyCharacteristicCallbacks : public BLECharacteristicCallbacks {
 
       int receivedValue = static_cast<int>(value[0]);
       if (receivedValue == 1) {
-        digitalWrite(ledPin, HIGH);
+        digitalWrite(builtInLED, HIGH);
       } else {
-        digitalWrite(ledPin, LOW);
+        digitalWrite(builtInLED, LOW);
       }
     }
   }
 };
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(ledPin, OUTPUT);
-
+void BLESetup(){
   // Create the BLE Device
   BLEDevice::init("ESP32");
 
@@ -100,9 +103,24 @@ void setup() {
   pAdvertising->setMinPreferred(0x0);  // set value to 0x00 to not advertise this parameter
   BLEDevice::startAdvertising();
   Serial.println("Waiting a client connection to notify...");
+
 }
 
-void loop() {
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Starting up...");
+  delay(1000);
+  pinMode(builtInLED, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(YELLOW_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+
+  pinMode(buttonPin, INPUT_PULLUP);
+
+  BLESetup();
+}
+
+void BLELoop() {
   // notify changed value
   if (deviceConnected) {
     pSensorCharacteristic->setValue(String(value).c_str());
@@ -110,7 +128,7 @@ void loop() {
     value++;
     Serial.print("New value notified: ");
     Serial.println(value);
-    delay(3000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+    // delay(3000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
   }
   // disconnecting
   if (!deviceConnected && oldDeviceConnected) {
@@ -126,4 +144,34 @@ void loop() {
     oldDeviceConnected = deviceConnected;
     Serial.println("Device Connected");
   }
+}
+
+void loop() {
+  static elapsedMillis BLETimer = 0;
+  if(BLETimer >= 3000){ // Potentially can go as low as 3ms
+    BLETimer = 0;
+    BLELoop();
+  }
+
+  static elapsedMillis debugTimer = 0;
+  if(debugTimer >= 1000){
+    debugTimer = 0;
+    Serial.print("Button state: ");
+    Serial.println(digitalRead(buttonPin));
+    digitalWrite(builtInLED, digitalRead(buttonPin) == LOW ? HIGH : LOW);
+  }
+
+  // if(bool toggle = true){
+  if(digitalRead(buttonPin) == LOW){
+    // toggle = false;
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(GREEN_LED, LOW);
+  } else {
+    // toggle = true;
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(YELLOW_LED, HIGH);
+    digitalWrite(GREEN_LED, HIGH);
+  }
+
 }
