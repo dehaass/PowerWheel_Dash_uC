@@ -10,6 +10,10 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <elapsedMillis.h>
+#include <Wire.h>
+#include "data_struct.h"
+
+#define I2C_ADDR_THIS 0x42
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pSensorCharacteristic = NULL;
@@ -31,6 +35,56 @@ const int GREEN_LED = 1;
 #define SENSOR_CHARACTERISTIC_UUID "19b10001-e8f2-537e-4f6c-d104768a1214"
 #define LED_CHARACTERISTIC_UUID "19b10002-e8f2-537e-4f6c-d104768a1214"
 
+
+volatile bool I2CdataReceived = false;
+StateData I2Cstatedata;
+CommandData I2CTxCmd;
+// int I2C_packet = 0;
+
+// I2C Event Handlers
+void I2CReceiveEvent(int numBytes) {
+    if (numBytes < (int)(sizeof(StateData) + 1)) {
+        // Not enough bytes; discard
+        while (Wire.available()) Wire.read();
+        return;
+    }
+
+    // Read sensor data byte by byte
+    uint8_t *ptr = (uint8_t *)&I2Cstatedata;
+    for (size_t i = 0; i < sizeof(StateData); i++) {
+        if (Wire.available()) {
+            ptr[i] = Wire.read();
+        }
+    }
+
+    // Read checksum
+    uint8_t receivedChecksum = 0;
+    if (Wire.available()) {
+        receivedChecksum = Wire.read();
+    }
+
+    // Flush any extra bytes
+    while (Wire.available()) Wire.read();
+
+    // Verify checksum
+    uint8_t calcChecksum = computeChecksum(I2Cstatedata);
+    if (receivedChecksum == calcChecksum) {
+        I2CdataReceived = true;
+    } else {
+        Serial.print("Checksum mismatch: got ");
+        Serial.print(receivedChecksum);
+        Serial.print(", expected ");
+        Serial.println(calcChecksum);
+    }
+}
+
+
+void I2CRequestEvent() {
+  return;
+    Wire.write((uint8_t *)&I2CTxCmd, sizeof(CommandData));
+    Wire.write(computeChecksum(I2CTxCmd));
+}
+
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
@@ -43,17 +97,22 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 class MyCharacteristicCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic* pLedCharacteristic) {
-    // String value = pLedCharacteristic->getValue(); // Apparently this is the new version.
     std::string value = pLedCharacteristic->getValue();
-    if (value.length() > 0) {
-      Serial.print("Characteristic event, written: ");
-      Serial.println(static_cast<int>(value[0])); // Print the integer value
+    if (value.length() >= 8) { // Check if we received at least 8 bytes (2 float values)
+      // Extract the two float values from the received data
+      float value1, value2;
+      memcpy(&value1, value.data(), sizeof(float));
+      memcpy(&value2, value.data() + sizeof(float), sizeof(float));
+      
+      Serial.print("Received values - Value1: ");
+      Serial.print(value1);
+      Serial.print(", Value2: ");
+      Serial.println(value2);
 
-      int receivedValue = static_cast<int>(value[0]);
-      if (receivedValue == 1) {
-        digitalWrite(builtInLED, HIGH);
-      } else {
-        digitalWrite(builtInLED, LOW);
+      // Here you can process the received float values
+      // For example, you could use them to set power limits or other parameters
+      if (value1 >= 0 && value1 <= 255) {
+        I2CTxCmd.setMaxPower = static_cast<uint8_t>(value1);
       }
     }
   }
@@ -116,6 +175,11 @@ void setup() {
   pinMode(GREEN_LED, OUTPUT);
 
   pinMode(buttonPin, INPUT_PULLUP);
+    
+  // I2C Setup
+  Wire.begin((int)I2C_ADDR_THIS);
+  Wire.onReceive(I2CReceiveEvent);
+  Wire.onRequest(I2CRequestEvent);
 
   BLESetup();
 }
@@ -123,12 +187,35 @@ void setup() {
 void BLELoop() {
   // notify changed value
   if (deviceConnected) {
-    pSensorCharacteristic->setValue(String(value).c_str());
+    // Create a buffer to hold the three float values (12 bytes total)
+    uint8_t buffer[12];
+    
+    // For debugging
+    Serial.println("Current state values:");
+    Serial.print("Voltage: "); Serial.print(I2Cstatedata.batteryVoltage);
+    Serial.print(" Current: "); Serial.print(I2Cstatedata.batteryCurrent);
+    Serial.print(" Power: "); Serial.println(I2Cstatedata.batteryPower);
+    
+    // Copy the float values from the StateData struct
+    float *voltagePtr = (float *)&buffer[0];
+    float *currentPtr = (float *)&buffer[4];
+    float *powerPtr = (float *)&buffer[8];
+    
+    *voltagePtr = I2Cstatedata.batteryVoltage;
+    *currentPtr = I2Cstatedata.batteryCurrent;
+    *powerPtr = I2Cstatedata.batteryPower;
+    
+    // Set the value and notify
+    pSensorCharacteristic->setValue(buffer, sizeof(buffer));
     pSensorCharacteristic->notify();
-    value++;
-    Serial.print("New value notified: ");
-    Serial.println(value);
-    // delay(3000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+    
+    Serial.print("Notified values - Voltage: ");
+    Serial.print(I2Cstatedata.batteryVoltage);
+    Serial.print("V, Current: ");
+    Serial.print(I2Cstatedata.batteryCurrent);
+    Serial.print("A, Power: ");
+    Serial.print(I2Cstatedata.batteryPower);
+    Serial.println("W");
   }
   // disconnecting
   if (!deviceConnected && oldDeviceConnected) {
@@ -146,32 +233,73 @@ void BLELoop() {
   }
 }
 
+void I2CLoop(){
+  static unsigned long lastI2CRxTime = 0;
+  if(millis() - lastI2CRxTime > 5000) {
+    lastI2CRxTime = millis();
+    Serial.println("No I2C data received in last 5 seconds");
+  }
+
+  if(I2CdataReceived) {
+    lastI2CRxTime = millis();
+    
+    // The BLELoop will handle sending the data when I2CdataReceived is true
+    // Reset the flag after BLELoop has processed it
+    // I2CdataReceived = false;
+  }
+}
+
+void checkButton(){
+
+  if(digitalRead(buttonPin) == LOW){
+
+    // Output LEDs to indicate battery voltage level
+    // > 12.5V : Green, 11.5-12.5V : Yellow, <11.5V : Red
+    if(I2Cstatedata.batteryVoltage > 12.5){
+      digitalWrite(RED_LED, LOW);
+      digitalWrite(YELLOW_LED, LOW);
+      digitalWrite(GREEN_LED, HIGH);
+    } else if(I2Cstatedata.batteryVoltage > 11.5){
+      digitalWrite(RED_LED, LOW);
+      digitalWrite(YELLOW_LED, HIGH);
+      digitalWrite(GREEN_LED, LOW);
+    } else {
+      digitalWrite(RED_LED, HIGH);
+      digitalWrite(YELLOW_LED, LOW);
+      digitalWrite(GREEN_LED, LOW);
+    }
+  } else {
+    digitalWrite(RED_LED, LOW);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(GREEN_LED, LOW);
+  }
+
+}
+
 void loop() {
   static elapsedMillis BLETimer = 0;
-  if(BLETimer >= 3000){ // Potentially can go as low as 3ms
+  if(BLETimer >= 500 && I2CdataReceived){
+    I2CdataReceived = false;
     BLETimer = 0;
     BLELoop();
   }
+  
+  // Check for I2C updates
+  I2CLoop();
 
-  static elapsedMillis debugTimer = 0;
-  if(debugTimer >= 1000){
-    debugTimer = 0;
-    Serial.print("Button state: ");
-    Serial.println(digitalRead(buttonPin));
-    digitalWrite(builtInLED, digitalRead(buttonPin) == LOW ? HIGH : LOW);
+  static elapsedMillis buttonTimer = 0;
+  if(buttonTimer >= 100){
+    buttonTimer = 0;
+    checkButton();
   }
 
-  // if(bool toggle = true){
-  if(digitalRead(buttonPin) == LOW){
-    // toggle = false;
-    digitalWrite(RED_LED, HIGH);
-    digitalWrite(YELLOW_LED, LOW);
-    digitalWrite(GREEN_LED, LOW);
-  } else {
-    // toggle = true;
-    digitalWrite(RED_LED, LOW);
-    digitalWrite(YELLOW_LED, HIGH);
-    digitalWrite(GREEN_LED, HIGH);
-  }
+  // static elapsedMillis debugTimer = 0;
+  // if(debugTimer >= 1000){
+  //   debugTimer = 0;
+  //   Serial.print("Button state: ");
+  //   Serial.println(digitalRead(buttonPin));
+  //   digitalWrite(builtInLED, digitalRead(buttonPin) == LOW ? HIGH : LOW);
+  // }
+
 
 }

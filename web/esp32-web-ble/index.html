@@ -23,16 +23,38 @@
         </div>
         <div class="card-grid">   
             <div class="card">
-                <h2>Fetched Value</h2>
-                <p class="reading"><span id="valueContainer">NaN</span></p>
+                <h2>Received Values</h2>
+                <div id="valuesContainer">
+                    <div class="value-row">
+                        <p class="value-label">Voltage:</p>
+                        <p class="reading"><span id="value1">NaN</span></p>
+                    </div>
+                    <div class="value-row">
+                        <p class="value-label">Current:</p>
+                        <p class="reading"><span id="value2">NaN</span></p>
+                    </div>
+                    <div class="value-row">
+                        <p class="value-label">Power:</p>
+                        <p class="reading"><span id="value3">NaN</span></p>
+                    </div>
+                </div>
                 <p class="gray-label">Last reading: <span id="timestamp"></span></p>
             </div>
 
             <div class="card">
-                <h2>Control GPIO 2</h2>
-                <button id="onButton" class="onButton">ON</button>
-                <button id="offButton" class="offButton">OFF</button>
-                <p class="gray-label">Last value sent: <span id="valueSent"></span></p>
+                <h2>Control Values</h2>
+                <div class="control-container">
+                    <div class="control-row">
+                        <label for="value1Input">Value 1:</label>
+                        <input type="number" id="value1Input" step="0.1" value="0">
+                    </div>
+                    <div class="control-row">
+                        <label for="value2Input">Value 2:</label>
+                        <input type="number" id="value2Input" step="0.1" value="0">
+                    </div>
+                    <button id="sendValuesButton" class="sendButton">Send Values</button>
+                </div>
+                <p class="gray-label">Last values sent: <span id="valuesSent"></span></p>
             </div>
         </div>
     </div>
@@ -45,10 +67,13 @@
     // DOM Elements
     const connectButton = document.getElementById('connectBleButton');
     const disconnectButton = document.getElementById('disconnectBleButton');
-    const onButton = document.getElementById('onButton');
-    const offButton = document.getElementById('offButton');
-    const retrievedValue = document.getElementById('valueContainer');
-    const latestValueSent = document.getElementById('valueSent');
+    const sendValuesButton = document.getElementById('sendValuesButton');
+    const value1Element = document.getElementById('value1');
+    const value2Element = document.getElementById('value2');
+    const value3Element = document.getElementById('value3');
+    const value1Input = document.getElementById('value1Input');
+    const value2Input = document.getElementById('value2Input');
+    const valuesSentElement = document.getElementById('valuesSent');
     const bleStateContainer = document.getElementById('bleState');
     const timestampContainer = document.getElementById('timestamp');
 
@@ -73,9 +98,8 @@
     // Disconnect Button
     disconnectButton.addEventListener('click', disconnectDevice);
 
-    // Write to the ESP32 LED Characteristic
-    onButton.addEventListener('click', () => writeOnCharacteristic(1));
-    offButton.addEventListener('click', () => writeOnCharacteristic(0));
+    // Write values to the characteristic
+    sendValuesButton.addEventListener('click', sendValues);
 
     // Check if BLE is available in your Browser
     function isWebBluetoothEnabled() {
@@ -139,32 +163,63 @@
         connectToDevice();
     }
 
-    function handleCharacteristicChange(event){
-        const newValueReceived = new TextDecoder().decode(event.target.value);
-        console.log("Characteristic value changed: ", newValueReceived);
-        retrievedValue.innerHTML = newValueReceived;
-        timestampContainer.innerHTML = getDateTime();
+    function handleCharacteristicChange(event) {
+        try {
+            const buffer = event.target.value.buffer;
+            const view = new DataView(buffer);
+            
+            // Log the buffer size for debugging
+            console.log("Received buffer size:", buffer.byteLength);
+            
+            // Assuming each value is a 32-bit float (4 bytes)
+            const value1 = view.getFloat32(0, true); // true for little-endian
+            const value2 = view.getFloat32(4, true);
+            const value3 = view.getFloat32(8, true);
+
+            // Update UI with received values
+            value1Element.innerHTML = value1.toFixed(2);
+            value2Element.innerHTML = value2.toFixed(2);
+            value3Element.innerHTML = value3.toFixed(2);
+
+            console.log("Received values:", { value1, value2, value3 });
+            timestampContainer.innerHTML = getDateTime();
+        } catch (error) {
+            console.error("Error parsing received values:", error);
+            console.log("Raw value type:", typeof event.target.value);
+            console.log("Raw value:", event.target.value);
+        }
     }
 
-    function writeOnCharacteristic(value){
-        if (bleServer && bleServer.connected) {
-            bleServiceFound.getCharacteristic(ledCharacteristic)
+    function sendValues() {
+        if (!bleServer || !bleServer.connected) {
+            console.error("Bluetooth is not connected. Cannot write to characteristic.");
+            window.alert("Bluetooth is not connected. Cannot write to characteristic.\nConnect to BLE first!");
+            return;
+        }
+
+        const value1 = parseFloat(value1Input.value) || 0;
+        const value2 = parseFloat(value2Input.value) || 0;
+
+        // Create an ArrayBuffer to hold the values (8 bytes total for 2 float32 values)
+        const buffer = new ArrayBuffer(8);
+        const view = new DataView(buffer);
+
+        // Write the values as 32-bit floats (4 bytes each)
+        view.setFloat32(0, value1, true); // true for little-endian
+        view.setFloat32(4, value2, true);
+
+        bleServiceFound.getCharacteristic(ledCharacteristic)
             .then(characteristic => {
-                console.log("Found the LED characteristic: ", characteristic.uuid);
-                const data = new Uint8Array([value]);
-                return characteristic.writeValue(data);
+                console.log("Found characteristic, writing values:", { value1, value2 });
+                return characteristic.writeValue(buffer);
             })
             .then(() => {
-                latestValueSent.innerHTML = value;
-                console.log("Value written to LEDcharacteristic:", value);
+                valuesSentElement.innerHTML = `${value1.toFixed(2)}, ${value2.toFixed(2)}`;
+                console.log("Values written successfully");
             })
             .catch(error => {
-                console.error("Error writing to the LED characteristic: ", error);
+                console.error("Error writing values:", error);
             });
-        } else {
-            console.error ("Bluetooth is not connected. Cannot write to characteristic.")
-            window.alert("Bluetooth is not connected. Cannot write to characteristic. \n Connect to BLE first!")
-        }
     }
 
     function disconnectDevice() {
