@@ -3,7 +3,10 @@
   Complete project details at https://RandomNerdTutorials.com/esp32-web-bluetooth/
   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files.
   The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+  Web App: https://dehaass.github.io/PowerWheel_Dash_uC/web/esp32-web-ble/
 */
+
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -120,7 +123,7 @@ class MyCharacteristicCallbacks : public BLECharacteristicCallbacks {
 
 void BLESetup(){
   // Create the BLE Device
-  BLEDevice::init("ESP32");
+  BLEDevice::init("Power Wheel Server");
 
   // Create the BLE Server
   pServer = BLEDevice::createServer();
