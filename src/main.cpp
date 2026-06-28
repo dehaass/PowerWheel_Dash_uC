@@ -20,7 +20,7 @@
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pSensorCharacteristic = NULL;
-BLECharacteristic* pLedCharacteristic = NULL;
+BLECharacteristic* pCommandCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
@@ -36,12 +36,14 @@ const int GREEN_LED = 1;
 // https://www.uuidgenerator.net/
 #define SERVICE_UUID        "19b10000-e8f2-537e-4f6c-d104768a1214"
 #define SENSOR_CHARACTERISTIC_UUID "19b10001-e8f2-537e-4f6c-d104768a1214"
-#define LED_CHARACTERISTIC_UUID "19b10002-e8f2-537e-4f6c-d104768a1214"
+#define COMMAND_CHARACTERISTIC_UUID "19b10002-e8f2-537e-4f6c-d104768a1214"
 
+static_assert(sizeof(StateData) == 18, "Unexpected StateData size");
+static_assert(sizeof(CommandData) == 3, "Unexpected CommandData size");
 
 volatile bool I2CdataReceived = false;
 StateData I2Cstatedata;
-CommandData I2CTxCmd;
+CommandData I2CTxCmd = {0, 0, 0};
 // int I2C_packet = 0;
 
 // I2C Event Handlers
@@ -83,9 +85,12 @@ void I2CReceiveEvent(int numBytes) {
 
 
 void I2CRequestEvent() {
-  return;
     Wire.write((uint8_t *)&I2CTxCmd, sizeof(CommandData));
     Wire.write(computeChecksum(I2CTxCmd));
+
+  if (I2CTxCmd.reset != 0) {
+    I2CTxCmd.reset = 0;
+  }
 }
 
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -99,25 +104,26 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 class MyCharacteristicCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* pLedCharacteristic) {
-    std::string value = pLedCharacteristic->getValue();
-    if (value.length() >= 8) { // Check if we received at least 8 bytes (2 float values)
-      // Extract the two float values from the received data
-      float value1, value2;
-      memcpy(&value1, value.data(), sizeof(float));
-      memcpy(&value2, value.data() + sizeof(float), sizeof(float));
-      
-      Serial.print("Received values - Value1: ");
-      Serial.print(value1);
-      Serial.print(", Value2: ");
-      Serial.println(value2);
+  void onWrite(BLECharacteristic* pCommandCharacteristic) {
+    size_t payloadLength = pCommandCharacteristic->getLength();
+    const uint8_t* payloadData = pCommandCharacteristic->getData();
 
-      // Here you can process the received float values
-      // For example, you could use them to set power limits or other parameters
-      if (value1 >= 0 && value1 <= 255) {
-        I2CTxCmd.setMaxPower = static_cast<uint8_t>(value1);
-      }
+    if (payloadLength != sizeof(CommandData) || payloadData == nullptr) {
+      Serial.print("Unexpected command payload length: ");
+      Serial.println(payloadLength);
+      return;
     }
+
+    CommandData nextCommand;
+    memcpy(&nextCommand, payloadData, sizeof(CommandData));
+    I2CTxCmd = nextCommand;
+
+    Serial.print("Updated command - reset: ");
+    Serial.print(I2CTxCmd.reset);
+    Serial.print(", killSwitch: ");
+    Serial.print(I2CTxCmd.killSwitch);
+    Serial.print(", setMaxPower: ");
+    Serial.println(I2CTxCmd.setMaxPower);
   }
 };
 
@@ -142,18 +148,18 @@ void BLESetup(){
                     );
 
   // Create the ON button Characteristic
-  pLedCharacteristic = pService->createCharacteristic(
-                      LED_CHARACTERISTIC_UUID,
+  pCommandCharacteristic = pService->createCharacteristic(
+                      COMMAND_CHARACTERISTIC_UUID,
                       BLECharacteristic::PROPERTY_WRITE
                     );
 
   // Register the callback for the ON button characteristic
-  pLedCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
+  pCommandCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
 
   // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
   // Create a BLE Descriptor
   pSensorCharacteristic->addDescriptor(new BLE2902());
-  pLedCharacteristic->addDescriptor(new BLE2902());
+  pCommandCharacteristic->addDescriptor(new BLE2902());
 
   // Start the service
   pService->start();
@@ -178,6 +184,8 @@ void setup() {
   pinMode(GREEN_LED, OUTPUT);
 
   pinMode(buttonPin, INPUT_PULLUP);
+
+  memset(&I2Cstatedata, 0, sizeof(I2Cstatedata));
     
   // I2C Setup
   Wire.begin((int)I2C_ADDR_THIS);
@@ -190,35 +198,27 @@ void setup() {
 void BLELoop() {
   // notify changed value
   if (deviceConnected) {
-    // Create a buffer to hold the three float values (12 bytes total)
-    uint8_t buffer[12];
-    
-    // For debugging
-    Serial.println("Current state values:");
-    Serial.print("Voltage: "); Serial.print(I2Cstatedata.batteryVoltage);
-    Serial.print(" Current: "); Serial.print(I2Cstatedata.batteryCurrent);
-    Serial.print(" Power: "); Serial.println(I2Cstatedata.batteryPower);
-    
-    // Copy the float values from the StateData struct
-    float *voltagePtr = (float *)&buffer[0];
-    float *currentPtr = (float *)&buffer[4];
-    float *powerPtr = (float *)&buffer[8];
-    
-    *voltagePtr = I2Cstatedata.batteryVoltage;
-    *currentPtr = I2Cstatedata.batteryCurrent;
-    *powerPtr = I2Cstatedata.batteryPower;
-    
-    // Set the value and notify
-    pSensorCharacteristic->setValue(buffer, sizeof(buffer));
+    pSensorCharacteristic->setValue((uint8_t *)&I2Cstatedata, sizeof(StateData));
     pSensorCharacteristic->notify();
     
-    Serial.print("Notified values - Voltage: ");
+    Serial.print("Notified state - Voltage: ");
     Serial.print(I2Cstatedata.batteryVoltage);
     Serial.print("V, Current: ");
     Serial.print(I2Cstatedata.batteryCurrent);
     Serial.print("A, Power: ");
     Serial.print(I2Cstatedata.batteryPower);
-    Serial.println("W");
+    Serial.print("W, Gear: ");
+    Serial.print(I2Cstatedata.gearPosition);
+    Serial.print(", Throttle: ");
+    Serial.print(I2Cstatedata.throttleStatus);
+    Serial.print(", Motor PWM: ");
+    Serial.print(I2Cstatedata.powerToMotor);
+    Serial.print(", Power Limit: ");
+    Serial.print(I2Cstatedata.powerLimit);
+    Serial.print(", Accel: ");
+    Serial.print(I2Cstatedata.AccelState);
+    Serial.print(", Closed Loop: ");
+    Serial.println(I2Cstatedata.closedLoopControl);
   }
   // disconnecting
   if (!deviceConnected && oldDeviceConnected) {

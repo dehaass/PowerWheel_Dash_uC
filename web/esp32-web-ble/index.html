@@ -1,269 +1,399 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32 Web BLE App</title>
+    <title>PowerWheel Dash BLE Console</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="favicon.ico">
     <link rel="stylesheet" type="text/css" href="style.css">
     <meta charset="UTF-8">
 </head>
 <body>
-    <div class="topnav">
-        <h1>ESP32 Web BLE Application</h1>
-    </div>
-    <div class="content">
-        <div class="card-grid">
-            <div class="card">
-                <p>
-                    <button id="connectBleButton" class="connectButton"> Connect to BLE Device</button>
-                    <button id="disconnectBleButton" class="disconnectButton"> Disconnect BLE Device</button>
-                </p>
-                <p class="gray-label">BLE state: <strong><span id="bleState" style="color:#d13a30;">Disconnected</span></strong></p>
+    <div class="page-shell">
+        <div class="hero">
+            <div>
+                <p class="eyebrow">PowerWheel Dash</p>
+                <h1>BLE telemetry and command console</h1>
+                <p class="hero-copy">This dashboard decodes the full packed <code>StateData</code> payload from the ESP32 and writes packed <code>CommandData</code> bytes back over BLE for the next I2C read by the main controller.</p>
             </div>
+            <section class="card hero-status">
+                <p class="section-label">Connection</p>
+                <p class="status-line">BLE state: <strong><span id="bleState" class="status-disconnected">Disconnected</span></strong></p>
+                <p class="gray-label">Last reading: <span id="timestamp">Waiting for data</span></p>
+                <div class="button-row">
+                    <button id="connectBleButton" class="connectButton">Connect Device</button>
+                    <button id="disconnectBleButton" class="disconnectButton">Disconnect</button>
+                </div>
+            </section>
         </div>
-        <div class="card-grid">   
-            <div class="card">
-                <h2>Received Values</h2>
-                <div id="valuesContainer">
-                    <div class="value-row">
-                        <p class="value-label">Voltage:</p>
-                        <p class="reading"><span id="value1">NaN</span></p>
+
+        <div class="content-grid">
+            <section class="card telemetry-card">
+                <div class="card-header">
+                    <div>
+                        <p class="section-label">StateData</p>
+                        <h2>Vehicle telemetry</h2>
                     </div>
-                    <div class="value-row">
-                        <p class="value-label">Current:</p>
-                        <p class="reading"><span id="value2">NaN</span></p>
+                    <p class="gray-label">Payload size: <span id="payloadSize">0</span> bytes</p>
+                </div>
+
+                <div class="telemetry-grid">
+                    <div class="metric-card metric-highlight">
+                        <p class="metric-label">batteryVoltage</p>
+                        <p class="metric-value"><span id="batteryVoltage">--</span><span class="metric-unit">V</span></p>
                     </div>
-                    <div class="value-row">
-                        <p class="value-label">Power:</p>
-                        <p class="reading"><span id="value3">NaN</span></p>
+                    <div class="metric-card metric-highlight">
+                        <p class="metric-label">batteryCurrent</p>
+                        <p class="metric-value"><span id="batteryCurrent">--</span><span class="metric-unit">A</span></p>
+                    </div>
+                    <div class="metric-card metric-highlight">
+                        <p class="metric-label">batteryPower</p>
+                        <p class="metric-value"><span id="batteryPower">--</span><span class="metric-unit">W</span></p>
+                    </div>
+                    <div class="metric-card">
+                        <p class="metric-label">gearPosition</p>
+                        <p class="metric-value metric-plain" id="gearPosition">--</p>
+                    </div>
+                    <div class="metric-card">
+                        <p class="metric-label">throttleStatus</p>
+                        <p class="metric-value metric-plain" id="throttleStatus">--</p>
+                    </div>
+                    <div class="metric-card">
+                        <p class="metric-label">powerToMotor</p>
+                        <p class="metric-value metric-plain"><span id="powerToMotor">--</span><span class="metric-unit">PWM</span></p>
+                    </div>
+                    <div class="metric-card">
+                        <p class="metric-label">powerLimit</p>
+                        <p class="metric-value metric-plain"><span id="powerLimit">--</span><span class="metric-unit">PWM</span></p>
+                    </div>
+                    <div class="metric-card">
+                        <p class="metric-label">AccelState</p>
+                        <p class="metric-value metric-plain" id="AccelState">--</p>
+                    </div>
+                    <div class="metric-card">
+                        <p class="metric-label">closedLoopControl</p>
+                        <p class="metric-value metric-plain" id="closedLoopControl">--</p>
                     </div>
                 </div>
-                <p class="gray-label">Last reading: <span id="timestamp"></span></p>
-            </div>
+            </section>
 
-            <div class="card">
-                <h2>Control Values</h2>
-                <div class="control-container">
-                    <div class="control-row">
-                        <label for="value1Input">Value 1:</label>
-                        <input type="number" id="value1Input" step="0.1" value="0">
+            <section class="card command-card">
+                <div class="card-header">
+                    <div>
+                        <p class="section-label">CommandData</p>
+                        <h2>Controller commands</h2>
                     </div>
-                    <div class="control-row">
-                        <label for="value2Input">Value 2:</label>
-                        <input type="number" id="value2Input" step="0.1" value="0">
-                    </div>
-                    <button id="sendValuesButton" class="sendButton">Send Values</button>
+                    <p class="gray-label">BLE write size: 3 bytes</p>
                 </div>
-                <p class="gray-label">Last values sent: <span id="valuesSent"></span></p>
-            </div>
+
+                <div class="control-stack">
+                    <div class="control-row control-row-split">
+                        <div>
+                            <label for="killSwitchInput">killSwitch</label>
+                            <p class="control-help">Persistent state command. Enabled sends <code>1</code>, disabled sends <code>0</code>.</p>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="killSwitchInput">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="control-row">
+                        <label for="setMaxPowerInput">setMaxPower</label>
+                        <p class="control-help">PWM limit, clamped to 0-255 before transmission.</p>
+                        <div class="range-row">
+                            <input type="range" id="setMaxPowerSlider" min="0" max="255" step="1" value="0">
+                            <input type="number" id="setMaxPowerInput" min="0" max="255" step="1" value="0">
+                        </div>
+                    </div>
+
+                    <div class="control-row control-row-split">
+                        <div>
+                            <label>reset</label>
+                            <p class="control-help">One-shot pulse. The ESP32 clears <code>reset</code> after the main controller reads the I2C command payload.</p>
+                        </div>
+                        <button id="resetButton" class="warnButton">Send Reset Pulse</button>
+                    </div>
+                </div>
+
+                <div class="button-row button-row-tight">
+                    <button id="sendCommandsButton" class="sendButton">Resend Current Commands</button>
+                </div>
+                <p class="gray-label">Last command sent: <span id="commandsSent">None</span></p>
+            </section>
         </div>
     </div>
-    <div class="footer">
-        <p><a href="https://randomnerdtutorials.com/">Created by RandomNerdTutorials.com</a></p>
-        <p><a href="https://RandomNerdTutorials.com/esp32-web-bluetooth/">Read the full project here.</a></p>
-    </div>
-</body>
-<script>
-    // DOM Elements
-    const connectButton = document.getElementById('connectBleButton');
-    const disconnectButton = document.getElementById('disconnectBleButton');
-    const sendValuesButton = document.getElementById('sendValuesButton');
-    const value1Element = document.getElementById('value1');
-    const value2Element = document.getElementById('value2');
-    const value3Element = document.getElementById('value3');
-    const value1Input = document.getElementById('value1Input');
-    const value2Input = document.getElementById('value2Input');
-    const valuesSentElement = document.getElementById('valuesSent');
-    const bleStateContainer = document.getElementById('bleState');
-    const timestampContainer = document.getElementById('timestamp');
 
-    //Define BLE Device Specs
-    var deviceName ='ESP32';
-    var bleService = '19b10000-e8f2-537e-4f6c-d104768a1214';
-    var ledCharacteristic = '19b10002-e8f2-537e-4f6c-d104768a1214';
-    var sensorCharacteristic= '19b10001-e8f2-537e-4f6c-d104768a1214';
+    <script>
+        const connectButton = document.getElementById('connectBleButton');
+        const disconnectButton = document.getElementById('disconnectBleButton');
+        const sendCommandsButton = document.getElementById('sendCommandsButton');
+        const resetButton = document.getElementById('resetButton');
+        const killSwitchInput = document.getElementById('killSwitchInput');
+        const setMaxPowerInput = document.getElementById('setMaxPowerInput');
+        const setMaxPowerSlider = document.getElementById('setMaxPowerSlider');
+        const commandsSentElement = document.getElementById('commandsSent');
+        const bleStateContainer = document.getElementById('bleState');
+        const timestampContainer = document.getElementById('timestamp');
+        const payloadSizeElement = document.getElementById('payloadSize');
 
-    //Global Variables to Handle Bluetooth
-    var bleServer;
-    var bleServiceFound;
-    var sensorCharacteristicFound;
+        const stateElements = {
+            batteryVoltage: document.getElementById('batteryVoltage'),
+            batteryCurrent: document.getElementById('batteryCurrent'),
+            batteryPower: document.getElementById('batteryPower'),
+            gearPosition: document.getElementById('gearPosition'),
+            throttleStatus: document.getElementById('throttleStatus'),
+            powerToMotor: document.getElementById('powerToMotor'),
+            powerLimit: document.getElementById('powerLimit'),
+            AccelState: document.getElementById('AccelState'),
+            closedLoopControl: document.getElementById('closedLoopControl')
+        };
 
-    // Connect Button (search for BLE Devices only if BLE is available)
-    connectButton.addEventListener('click', (event) => {
-        if (isWebBluetoothEnabled()){
-            connectToDevice();
-        }
-    });
+        const deviceName = 'Power Wheel Server';
+        const bleService = '19b10000-e8f2-537e-4f6c-d104768a1214';
+        const commandCharacteristic = '19b10002-e8f2-537e-4f6c-d104768a1214';
+        const sensorCharacteristic = '19b10001-e8f2-537e-4f6c-d104768a1214';
 
-    // Disconnect Button
-    disconnectButton.addEventListener('click', disconnectDevice);
+        const STATE_DATA_SIZE = 18;
+        const COMMAND_DATA_SIZE = 3;
 
-    // Write values to the characteristic
-    sendValuesButton.addEventListener('click', sendValues);
+        const gearPositionMap = {
+            0: 'Reverse',
+            1: 'Low',
+            2: 'High'
+        };
 
-    // Check if BLE is available in your Browser
-    function isWebBluetoothEnabled() {
-        if (!navigator.bluetooth) {
-            console.log('Web Bluetooth API is not available in this browser!');
-            bleStateContainer.innerHTML = "Web Bluetooth API is not available in this browser/device!";
-            return false
-        }
-        console.log('Web Bluetooth API supported in this browser.');
-        return true
-    }
+        const throttleStatusMap = {
+            0: 'Off',
+            1: 'On'
+        };
 
-    // Connect to BLE Device and Enable Notifications
-    function connectToDevice(){
-        console.log('Initializing Bluetooth...');
-        navigator.bluetooth.requestDevice({
-            filters: [{name: deviceName}],
-            optionalServices: [bleService]
-        })
-        .then(device => {
-            console.log('Device Selected:', device.name);
-            bleStateContainer.innerHTML = 'Connected to device ' + device.name;
-            bleStateContainer.style.color = "#24af37";
-            device.addEventListener('gattservicedisconnected', onDisconnected);
-            return device.gatt.connect();
-        })
-        .then(gattServer =>{
-            bleServer = gattServer;
-            console.log("Connected to GATT Server");
-            return bleServer.getPrimaryService(bleService);
-        })
-        .then(service => {
-            bleServiceFound = service;
-            console.log("Service discovered:", service.uuid);
-            return service.getCharacteristic(sensorCharacteristic);
-        })
-        .then(characteristic => {
-            console.log("Characteristic discovered:", characteristic.uuid);
-            sensorCharacteristicFound = characteristic;
-            characteristic.addEventListener('characteristicvaluechanged', handleCharacteristicChange);
-            characteristic.startNotifications();
-            console.log("Notifications Started.");
-            return characteristic.readValue();
-        })
-        .then(value => {
-            console.log("Read value: ", value);
-            const decodedValue = new TextDecoder().decode(value);
-            console.log("Decoded value: ", decodedValue);
-            retrievedValue.innerHTML = decodedValue;            
-        })
-        .catch(error => {
-            console.log('Error: ', error);
-        })
-    }
+        const accelStateMap = {
+            '-1': 'Decreasing',
+            0: 'Steady',
+            1: 'Increasing',
+            2: 'Stopped'
+        };
 
-    function onDisconnected(event){
-        console.log('Device Disconnected:', event.target.device.name);
-        bleStateContainer.innerHTML = "Device disconnected";
-        bleStateContainer.style.color = "#d13a30";
+        const closedLoopMap = {
+            0: 'Open loop',
+            1: 'Closed loop'
+        };
 
-        connectToDevice();
-    }
+        let bleServer;
+        let bleServiceFound;
+        let sensorCharacteristicFound;
 
-    function handleCharacteristicChange(event) {
-        try {
-            const buffer = event.target.value.buffer;
-            const view = new DataView(buffer);
-            
-            // Log the buffer size for debugging
-            console.log("Received buffer size:", buffer.byteLength);
-            
-            // Assuming each value is a 32-bit float (4 bytes)
-            const value1 = view.getFloat32(0, true); // true for little-endian
-            const value2 = view.getFloat32(4, true);
-            const value3 = view.getFloat32(8, true);
+        const currentCommands = {
+            killSwitch: 0,
+            setMaxPower: 0
+        };
 
-            // Update UI with received values
-            value1Element.innerHTML = value1.toFixed(2);
-            value2Element.innerHTML = value2.toFixed(2);
-            value3Element.innerHTML = value3.toFixed(2);
-
-            console.log("Received values:", { value1, value2, value3 });
-            timestampContainer.innerHTML = getDateTime();
-        } catch (error) {
-            console.error("Error parsing received values:", error);
-            console.log("Raw value type:", typeof event.target.value);
-            console.log("Raw value:", event.target.value);
-        }
-    }
-
-    function sendValues() {
-        if (!bleServer || !bleServer.connected) {
-            console.error("Bluetooth is not connected. Cannot write to characteristic.");
-            window.alert("Bluetooth is not connected. Cannot write to characteristic.\nConnect to BLE first!");
-            return;
-        }
-
-        const value1 = parseFloat(value1Input.value) || 0;
-        const value2 = parseFloat(value2Input.value) || 0;
-
-        // Create an ArrayBuffer to hold the values (8 bytes total for 2 float32 values)
-        const buffer = new ArrayBuffer(8);
-        const view = new DataView(buffer);
-
-        // Write the values as 32-bit floats (4 bytes each)
-        view.setFloat32(0, value1, true); // true for little-endian
-        view.setFloat32(4, value2, true);
-
-        bleServiceFound.getCharacteristic(ledCharacteristic)
-            .then(characteristic => {
-                console.log("Found characteristic, writing values:", { value1, value2 });
-                return characteristic.writeValue(buffer);
-            })
-            .then(() => {
-                valuesSentElement.innerHTML = `${value1.toFixed(2)}, ${value2.toFixed(2)}`;
-                console.log("Values written successfully");
-            })
-            .catch(error => {
-                console.error("Error writing values:", error);
-            });
-    }
-
-    function disconnectDevice() {
-        console.log("Disconnect Device.");
-        if (bleServer && bleServer.connected) {
-            if (sensorCharacteristicFound) {
-                sensorCharacteristicFound.stopNotifications()
-                    .then(() => {
-                        console.log("Notifications Stopped");
-                        return bleServer.disconnect();
-                    })
-                    .then(() => {
-                        console.log("Device Disconnected");
-                        bleStateContainer.innerHTML = "Device Disconnected";
-                        bleStateContainer.style.color = "#d13a30";
-
-                    })
-                    .catch(error => {
-                        console.log("An error occurred:", error);
-                    });
-            } else {
-                console.log("No characteristic found to disconnect.");
+        connectButton.addEventListener('click', () => {
+            if (isWebBluetoothEnabled()) {
+                connectToDevice();
             }
-        } else {
-            // Throw an error if Bluetooth is not connected
-            console.error("Bluetooth is not connected.");
-            window.alert("Bluetooth is not connected.")
+        });
+
+        disconnectButton.addEventListener('click', disconnectDevice);
+        sendCommandsButton.addEventListener('click', () => sendCommandPayload(false));
+        resetButton.addEventListener('click', () => sendCommandPayload(true));
+
+        killSwitchInput.addEventListener('change', () => {
+            currentCommands.killSwitch = killSwitchInput.checked ? 1 : 0;
+            sendCommandPayload(false);
+        });
+
+        setMaxPowerInput.addEventListener('change', () => {
+            syncMaxPowerControls(setMaxPowerInput.value);
+            sendCommandPayload(false);
+        });
+
+        setMaxPowerSlider.addEventListener('input', () => {
+            setMaxPowerInput.value = setMaxPowerSlider.value;
+        });
+
+        setMaxPowerSlider.addEventListener('change', () => {
+            syncMaxPowerControls(setMaxPowerSlider.value);
+            sendCommandPayload(false);
+        });
+
+        function isWebBluetoothEnabled() {
+            if (!navigator.bluetooth) {
+                console.log('Web Bluetooth API is not available in this browser!');
+                bleStateContainer.textContent = 'Web Bluetooth unavailable';
+                bleStateContainer.className = 'status-disconnected';
+                return false;
+            }
+
+            console.log('Web Bluetooth API supported in this browser.');
+            return true;
         }
-    }
 
-    function getDateTime() {
-        var currentdate = new Date();
-        var day = ("00" + currentdate.getDate()).slice(-2); // Convert day to string and slice
-        var month = ("00" + (currentdate.getMonth() + 1)).slice(-2);
-        var year = currentdate.getFullYear();
-        var hours = ("00" + currentdate.getHours()).slice(-2);
-        var minutes = ("00" + currentdate.getMinutes()).slice(-2);
-        var seconds = ("00" + currentdate.getSeconds()).slice(-2);
-        
-        var datetime = day + "/" + month + "/" + year + " at " + hours + ":" + minutes + ":" + seconds;
-        return datetime;
-    }
+        async function connectToDevice() {
+            try {
+                console.log('Initializing Bluetooth...');
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ name: deviceName }],
+                    optionalServices: [bleService]
+                });
 
+                console.log('Device Selected:', device.name);
+                bleStateContainer.textContent = 'Connected to ' + device.name;
+                bleStateContainer.className = 'status-connected';
+                device.addEventListener('gattservicedisconnected', onDisconnected);
 
-</script>
+                bleServer = await device.gatt.connect();
+                console.log('Connected to GATT Server');
 
+                bleServiceFound = await bleServer.getPrimaryService(bleService);
+                console.log('Service discovered:', bleServiceFound.uuid);
+
+                sensorCharacteristicFound = await bleServiceFound.getCharacteristic(sensorCharacteristic);
+                console.log('Characteristic discovered:', sensorCharacteristicFound.uuid);
+                sensorCharacteristicFound.addEventListener('characteristicvaluechanged', handleCharacteristicChange);
+                await sensorCharacteristicFound.startNotifications();
+                console.log('Notifications Started.');
+
+                const initialValue = await sensorCharacteristicFound.readValue();
+                handleCharacteristicChange({ target: { value: initialValue } });
+            } catch (error) {
+                console.log('Error:', error);
+                bleStateContainer.textContent = 'Connection failed';
+                bleStateContainer.className = 'status-disconnected';
+            }
+        }
+
+        function onDisconnected(event) {
+            console.log('Device Disconnected:', event.target.device.name);
+            bleStateContainer.textContent = 'Device disconnected';
+            bleStateContainer.className = 'status-disconnected';
+        }
+
+        function handleCharacteristicChange(event) {
+            try {
+                const dataView = event.target.value instanceof DataView
+                    ? event.target.value
+                    : new DataView(event.target.value.buffer, event.target.value.byteOffset, event.target.value.byteLength);
+
+                payloadSizeElement.textContent = dataView.byteLength;
+
+                if (dataView.byteLength < STATE_DATA_SIZE) {
+                    throw new Error(`Expected ${STATE_DATA_SIZE} bytes, received ${dataView.byteLength}`);
+                }
+
+                const state = decodeStateData(dataView);
+                renderStateData(state);
+                timestampContainer.textContent = getDateTime();
+                console.log('Received values:', state);
+            } catch (error) {
+                console.error('Error parsing received values:', error);
+            }
+        }
+
+        function decodeStateData(view) {
+            return {
+                batteryVoltage: view.getFloat32(0, true),
+                batteryCurrent: view.getFloat32(4, true),
+                batteryPower: view.getFloat32(8, true),
+                gearPosition: view.getInt8(12),
+                throttleStatus: view.getUint8(13),
+                powerToMotor: view.getUint8(14),
+                powerLimit: view.getUint8(15),
+                AccelState: view.getInt8(16),
+                closedLoopControl: view.getUint8(17)
+            };
+        }
+
+        function renderStateData(state) {
+            stateElements.batteryVoltage.textContent = state.batteryVoltage.toFixed(2);
+            stateElements.batteryCurrent.textContent = state.batteryCurrent.toFixed(2);
+            stateElements.batteryPower.textContent = state.batteryPower.toFixed(2);
+            stateElements.gearPosition.textContent = gearPositionMap[state.gearPosition] ?? state.gearPosition;
+            stateElements.throttleStatus.textContent = throttleStatusMap[state.throttleStatus] ?? state.throttleStatus;
+            stateElements.powerToMotor.textContent = state.powerToMotor;
+            stateElements.powerLimit.textContent = state.powerLimit;
+            stateElements.AccelState.textContent = accelStateMap[state.AccelState] ?? state.AccelState;
+            stateElements.closedLoopControl.textContent = closedLoopMap[state.closedLoopControl] ?? state.closedLoopControl;
+        }
+
+        function clampByte(value) {
+            const numericValue = Number.parseInt(value, 10);
+            if (Number.isNaN(numericValue)) {
+                return 0;
+            }
+
+            return Math.min(255, Math.max(0, numericValue));
+        }
+
+        function syncMaxPowerControls(value) {
+            const clampedValue = clampByte(value);
+            currentCommands.setMaxPower = clampedValue;
+            setMaxPowerInput.value = clampedValue;
+            setMaxPowerSlider.value = clampedValue;
+        }
+
+        async function sendCommandPayload(sendResetPulse) {
+            if (!bleServer || !bleServer.connected) {
+                console.error('Bluetooth is not connected. Cannot write to characteristic.');
+                commandsSentElement.textContent = 'Pending BLE connection';
+                return;
+            }
+
+            syncMaxPowerControls(setMaxPowerInput.value);
+            currentCommands.killSwitch = killSwitchInput.checked ? 1 : 0;
+
+            const buffer = new ArrayBuffer(COMMAND_DATA_SIZE);
+            const view = new DataView(buffer);
+            view.setUint8(0, sendResetPulse ? 1 : 0);
+            view.setUint8(1, currentCommands.killSwitch);
+            view.setUint8(2, currentCommands.setMaxPower);
+
+            try {
+                const characteristic = await bleServiceFound.getCharacteristic(commandCharacteristic);
+                await characteristic.writeValue(buffer);
+                const resetValue = sendResetPulse ? 1 : 0;
+                commandsSentElement.textContent = `reset=${resetValue}, killSwitch=${currentCommands.killSwitch}, setMaxPower=${currentCommands.setMaxPower}`;
+                console.log('Command payload written successfully');
+            } catch (error) {
+                console.error('Error writing command payload:', error);
+            }
+        }
+
+        async function disconnectDevice() {
+            console.log('Disconnect Device.');
+            if (!bleServer || !bleServer.connected) {
+                console.error('Bluetooth is not connected.');
+                window.alert('Bluetooth is not connected.');
+                return;
+            }
+
+            try {
+                if (sensorCharacteristicFound) {
+                    await sensorCharacteristicFound.stopNotifications();
+                    console.log('Notifications Stopped');
+                }
+
+                bleServer.disconnect();
+                bleStateContainer.textContent = 'Device disconnected';
+                bleStateContainer.className = 'status-disconnected';
+            } catch (error) {
+                console.log('An error occurred:', error);
+            }
+        }
+
+        function getDateTime() {
+            const currentdate = new Date();
+            const day = ('00' + currentdate.getDate()).slice(-2);
+            const month = ('00' + (currentdate.getMonth() + 1)).slice(-2);
+            const year = currentdate.getFullYear();
+            const hours = ('00' + currentdate.getHours()).slice(-2);
+            const minutes = ('00' + currentdate.getMinutes()).slice(-2);
+            const seconds = ('00' + currentdate.getSeconds()).slice(-2);
+
+            return day + '/' + month + '/' + year + ' at ' + hours + ':' + minutes + ':' + seconds;
+        }
+
+        syncMaxPowerControls(0);
+    </script>
+</body>
 </html>
