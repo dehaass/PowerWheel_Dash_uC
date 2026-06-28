@@ -4,6 +4,7 @@
     <title>PowerWheel Dash BLE Console</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/uplot/dist/uPlot.min.css">
     <link rel="stylesheet" type="text/css" href="style.css">
     <meta charset="UTF-8">
 </head>
@@ -36,42 +37,82 @@
                     <p class="gray-label">Payload size: <span id="payloadSize">0</span> bytes</p>
                 </div>
 
-                <div class="telemetry-grid">
-                    <div class="metric-card metric-highlight">
-                        <p class="metric-label">batteryVoltage</p>
-                        <p class="metric-value"><span id="batteryVoltage">--</span><span class="metric-unit">V</span></p>
+                <div class="graph-grid">
+                    <div class="graph-card">
+                        <div class="graph-head">
+                            <p class="metric-label">batteryVoltage</p>
+                            <p class="graph-reading"><span id="batteryVoltage">--</span><span class="metric-unit">V</span></p>
+                        </div>
+                        <div id="chartBatteryVoltage" class="mini-uplot"></div>
                     </div>
-                    <div class="metric-card metric-highlight">
-                        <p class="metric-label">batteryCurrent</p>
-                        <p class="metric-value"><span id="batteryCurrent">--</span><span class="metric-unit">A</span></p>
+                    <div class="graph-card">
+                        <div class="graph-head">
+                            <p class="metric-label">batteryCurrent</p>
+                            <p class="graph-reading"><span id="batteryCurrent">--</span><span class="metric-unit">A</span></p>
+                        </div>
+                        <div id="chartBatteryCurrent" class="mini-uplot"></div>
                     </div>
-                    <div class="metric-card metric-highlight">
-                        <p class="metric-label">batteryPower</p>
-                        <p class="metric-value"><span id="batteryPower">--</span><span class="metric-unit">W</span></p>
+                    <div class="graph-card">
+                        <div class="graph-head">
+                            <p class="metric-label">batteryPower</p>
+                            <p class="graph-reading"><span id="batteryPower">--</span><span class="metric-unit">W</span></p>
+                        </div>
+                        <div id="chartBatteryPower" class="mini-uplot"></div>
                     </div>
-                    <div class="metric-card">
+                    <div class="graph-card">
+                        <div class="graph-head">
+                            <p class="metric-label">powerToMotor</p>
+                            <p class="graph-reading"><span id="powerToMotor">--</span><span class="metric-unit">PWM</span></p>
+                        </div>
+                        <div id="chartPowerToMotor" class="mini-uplot"></div>
+                    </div>
+                </div>
+
+                <div class="state-grid">
+                    <div class="state-card">
                         <p class="metric-label">gearPosition</p>
-                        <p class="metric-value metric-plain" id="gearPosition">--</p>
+                        <div class="lights" id="gearPositionLights">
+                            <span class="light light-red"></span>
+                            <span class="light light-yellow"></span>
+                            <span class="light light-green"></span>
+                        </div>
+                        <p class="state-value" id="gearPosition">--</p>
                     </div>
-                    <div class="metric-card">
+                    <div class="state-card">
                         <p class="metric-label">throttleStatus</p>
-                        <p class="metric-value metric-plain" id="throttleStatus">--</p>
+                        <div class="lights" id="throttleStatusLights">
+                            <span class="light light-red"></span>
+                            <span class="light light-yellow"></span>
+                            <span class="light light-green"></span>
+                        </div>
+                        <p class="state-value" id="throttleStatus">--</p>
                     </div>
-                    <div class="metric-card">
-                        <p class="metric-label">powerToMotor</p>
-                        <p class="metric-value metric-plain"><span id="powerToMotor">--</span><span class="metric-unit">PWM</span></p>
-                    </div>
-                    <div class="metric-card">
+                    <div class="state-card">
                         <p class="metric-label">powerLimit</p>
-                        <p class="metric-value metric-plain"><span id="powerLimit">--</span><span class="metric-unit">PWM</span></p>
+                        <div class="lights" id="powerLimitLights">
+                            <span class="light light-red"></span>
+                            <span class="light light-yellow"></span>
+                            <span class="light light-green"></span>
+                        </div>
+                        <p class="state-value"><span id="powerLimit">--</span> PWM</p>
                     </div>
-                    <div class="metric-card">
+                    <div class="state-card">
                         <p class="metric-label">AccelState</p>
-                        <p class="metric-value metric-plain" id="AccelState">--</p>
+                        <div class="lights" id="accelStateLights">
+                            <span class="light light-red"></span>
+                            <span class="light light-yellow"></span>
+                            <span class="light light-green"></span>
+                        </div>
+                        <p class="state-value" id="AccelState">--</p>
                     </div>
-                    <div class="metric-card">
+                    <div class="state-card">
                         <p class="metric-label">closedLoopControl</p>
-                        <p class="metric-value metric-plain" id="closedLoopControl">--</p>
+                        <div class="lights" id="closedLoopLights">
+                            <span class="light light-red"></span>
+                            <span class="light light-yellow"></span>
+                            <span class="light light-green"></span>
+                        </div>
+                        <p class="state-value" id="closedLoopControl">--</p>
                     </div>
                 </div>
             </section>
@@ -89,7 +130,7 @@
                     <div class="control-row control-row-split">
                         <div>
                             <label for="killSwitchInput">killSwitch</label>
-                            <p class="control-help">Persistent state command. Enabled sends <code>1</code>, disabled sends <code>0</code>.</p>
+                            <p class="control-help">Safety command. Toggle on sends 1, off sends 0.</p>
                         </div>
                         <label class="toggle">
                             <input type="checkbox" id="killSwitchInput">
@@ -97,21 +138,25 @@
                         </label>
                     </div>
 
-                    <div class="control-row">
-                        <label for="setMaxPowerInput">setMaxPower</label>
-                        <p class="control-help">PWM limit, clamped to 0-255 before transmission.</p>
-                        <div class="range-row">
-                            <input type="range" id="setMaxPowerSlider" min="0" max="255" step="1" value="0">
-                            <input type="number" id="setMaxPowerInput" min="0" max="255" step="1" value="0">
-                        </div>
-                    </div>
-
                     <div class="control-row control-row-split">
                         <div>
-                            <label>reset</label>
-                            <p class="control-help">One-shot pulse. The ESP32 clears <code>reset</code> after the main controller reads the I2C command payload.</p>
+                            <label for="resetPulseToggle">reset</label>
+                            <p class="control-help">One-shot pulse. Toggle up to send reset=1 once.</p>
                         </div>
-                        <button id="resetButton" class="warnButton">Send Reset Pulse</button>
+                        <label class="toggle toggle-warn">
+                            <input type="checkbox" id="resetPulseToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="control-row">
+                        <label for="setMaxPowerInput">setMaxPower</label>
+                        <p class="control-help">PWM limit, clamped to 0-255.</p>
+                        <div class="range-row">
+                            <input type="range" id="setMaxPowerSlider" min="0" max="255" step="1" value="0">
+                            <p class="slider-value"><span id="setMaxPowerValue">0</span></p>
+                            <input type="number" id="setMaxPowerInput" min="0" max="255" step="1" value="0">
+                        </div>
                     </div>
                 </div>
 
@@ -123,14 +168,16 @@
         </div>
     </div>
 
+    <script src="https://unpkg.com/uplot/dist/uPlot.iife.min.js"></script>
     <script>
         const connectButton = document.getElementById('connectBleButton');
         const disconnectButton = document.getElementById('disconnectBleButton');
         const sendCommandsButton = document.getElementById('sendCommandsButton');
-        const resetButton = document.getElementById('resetButton');
+        const resetPulseToggle = document.getElementById('resetPulseToggle');
         const killSwitchInput = document.getElementById('killSwitchInput');
         const setMaxPowerInput = document.getElementById('setMaxPowerInput');
         const setMaxPowerSlider = document.getElementById('setMaxPowerSlider');
+        const setMaxPowerValue = document.getElementById('setMaxPowerValue');
         const commandsSentElement = document.getElementById('commandsSent');
         const bleStateContainer = document.getElementById('bleState');
         const timestampContainer = document.getElementById('timestamp');
@@ -148,6 +195,33 @@
             closedLoopControl: document.getElementById('closedLoopControl')
         };
 
+        const lightElements = {
+            gearPosition: document.getElementById('gearPositionLights'),
+            throttleStatus: document.getElementById('throttleStatusLights'),
+            powerLimit: document.getElementById('powerLimitLights'),
+            AccelState: document.getElementById('accelStateLights'),
+            closedLoopControl: document.getElementById('closedLoopLights')
+        };
+
+        const chartConfig = {
+            batteryVoltage: { el: document.getElementById('chartBatteryVoltage'), color: '#2b7a6a' },
+            batteryCurrent: { el: document.getElementById('chartBatteryCurrent'), color: '#ce6a32' },
+            batteryPower: { el: document.getElementById('chartBatteryPower'), color: '#14637a' },
+            powerToMotor: { el: document.getElementById('chartPowerToMotor'), color: '#7f4f24' }
+        };
+
+        const chartHistory = {
+            x: [],
+            batteryVoltage: [],
+            batteryCurrent: [],
+            batteryPower: [],
+            powerToMotor: []
+        };
+
+        const chartPlots = {};
+        let resizeObserver;
+        let hasLiveData = false;
+
         const deviceName = 'Power Wheel Server';
         const bleService = '19b10000-e8f2-537e-4f6c-d104768a1214';
         const commandCharacteristic = '19b10002-e8f2-537e-4f6c-d104768a1214';
@@ -155,6 +229,7 @@
 
         const STATE_DATA_SIZE = 18;
         const COMMAND_DATA_SIZE = 3;
+        const CHART_POINTS = 60;
 
         const gearPositionMap = {
             0: 'Reverse',
@@ -196,7 +271,15 @@
 
         disconnectButton.addEventListener('click', disconnectDevice);
         sendCommandsButton.addEventListener('click', () => sendCommandPayload(false));
-        resetButton.addEventListener('click', () => sendCommandPayload(true));
+        resetPulseToggle.addEventListener('change', () => {
+            if (!resetPulseToggle.checked) {
+                return;
+            }
+
+            sendCommandPayload(true).finally(() => {
+                resetPulseToggle.checked = false;
+            });
+        });
 
         killSwitchInput.addEventListener('change', () => {
             currentCommands.killSwitch = killSwitchInput.checked ? 1 : 0;
@@ -305,6 +388,7 @@
         }
 
         function renderStateData(state) {
+            hasLiveData = true;
             stateElements.batteryVoltage.textContent = state.batteryVoltage.toFixed(2);
             stateElements.batteryCurrent.textContent = state.batteryCurrent.toFixed(2);
             stateElements.batteryPower.textContent = state.batteryPower.toFixed(2);
@@ -314,6 +398,159 @@
             stateElements.powerLimit.textContent = state.powerLimit;
             stateElements.AccelState.textContent = accelStateMap[state.AccelState] ?? state.AccelState;
             stateElements.closedLoopControl.textContent = closedLoopMap[state.closedLoopControl] ?? state.closedLoopControl;
+
+            pushChartSample('batteryVoltage', state.batteryVoltage);
+            pushChartSample('batteryCurrent', state.batteryCurrent);
+            pushChartSample('batteryPower', state.batteryPower);
+            pushChartSample('powerToMotor', state.powerToMotor);
+            syncAllPlots();
+
+            setLightState(lightElements.gearPosition, state.gearPosition === 2 ? 'green' : (state.gearPosition === 1 ? 'yellow' : 'red'));
+            setLightState(lightElements.throttleStatus, state.throttleStatus === 1 ? 'green' : 'red');
+            setLightState(lightElements.powerLimit, state.powerLimit > 170 ? 'green' : (state.powerLimit > 85 ? 'yellow' : 'red'));
+            setLightState(lightElements.AccelState, state.AccelState === 1 ? 'green' : (state.AccelState === -1 ? 'yellow' : 'red'));
+            setLightState(lightElements.closedLoopControl, state.closedLoopControl === 1 ? 'green' : 'red');
+        }
+
+        function pushChartSample(key, value) {
+            if (key === 'batteryVoltage') {
+                chartHistory.x.push(Date.now() / 1000);
+                if (chartHistory.x.length > CHART_POINTS) {
+                    chartHistory.x.shift();
+                }
+            }
+
+            chartHistory[key].push(value);
+            if (chartHistory[key].length > CHART_POINTS) {
+                chartHistory[key].shift();
+            }
+        }
+
+        function initPlots() {
+            if (typeof uPlot === 'undefined') {
+                console.error('uPlot is not loaded');
+                return;
+            }
+
+            seedPlotHistory();
+
+            Object.keys(chartConfig).forEach((key) => {
+                chartPlots[key] = createMiniPlot(key);
+            });
+
+            resizeObserver = new ResizeObserver(() => {
+                Object.keys(chartPlots).forEach((key) => {
+                    resizePlot(key);
+                });
+            });
+
+            Object.values(chartConfig).forEach((config) => {
+                if (config.el) {
+                    resizeObserver.observe(config.el);
+                }
+            });
+
+            syncAllPlots();
+        }
+
+        function seedPlotHistory() {
+            const now = Date.now() / 1000;
+            const seedX = [now - 1, now];
+            chartHistory.x = seedX.slice();
+            chartHistory.batteryVoltage = [0, 0];
+            chartHistory.batteryCurrent = [0, 0];
+            chartHistory.batteryPower = [0, 0];
+            chartHistory.powerToMotor = [0, 0];
+        }
+
+        function createMiniPlot(key) {
+            const config = chartConfig[key];
+            if (!config || !config.el) {
+                return null;
+            }
+
+            const width = Math.max(220, Math.floor(config.el.clientWidth || 220));
+            const height = 92;
+
+            return new uPlot({
+                width,
+                height,
+                scales: {
+                    x: { time: true }
+                },
+                axes: [
+                    {
+                        stroke: 'rgba(29, 26, 22, 0.25)',
+                        grid: { stroke: 'rgba(29, 26, 22, 0.08)' },
+                        values: (_, ticks) => ticks.map((t) => {
+                            const date = new Date(t * 1000);
+                            return `${date.getMinutes()}:${String(date.getSeconds()).padStart(2, '0')}`;
+                        })
+                    },
+                    {
+                        stroke: 'rgba(29, 26, 22, 0.25)',
+                        grid: { stroke: 'rgba(29, 26, 22, 0.08)' }
+                    }
+                ],
+                series: [
+                    {},
+                    {
+                        stroke: config.color,
+                        width: 2,
+                        fill: `${config.color}26`
+                    }
+                ],
+                legend: { show: false },
+                cursor: { drag: { setScale: false } },
+                padding: [4, 6, 4, 8]
+            }, [chartHistory.x.slice(), chartHistory[key].slice()], config.el);
+        }
+
+        function resizePlot(key) {
+            const plot = chartPlots[key];
+            const config = chartConfig[key];
+            if (!plot || !config || !config.el) {
+                return;
+            }
+
+            const width = Math.max(220, Math.floor(config.el.clientWidth || 220));
+            plot.setSize({ width, height: 92 });
+        }
+
+        function syncAllPlots() {
+            const keys = ['batteryVoltage', 'batteryCurrent', 'batteryPower', 'powerToMotor'];
+            keys.forEach((key) => {
+                const plot = chartPlots[key];
+                if (!plot || chartHistory[key].length < 2 || chartHistory.x.length < 2) {
+                    return;
+                }
+
+                plot.setData([
+                    chartHistory.x.slice(),
+                    chartHistory[key].slice()
+                ]);
+            });
+
+            const statusLabel = hasLiveData ? 'Live data plotting' : 'Awaiting live BLE data';
+            const statusNodes = document.querySelectorAll('.graph-card');
+            statusNodes.forEach((node) => {
+                node.dataset.plotStatus = statusLabel;
+            });
+        }
+
+        function setLightState(lightContainer, color) {
+            if (!lightContainer) {
+                return;
+            }
+
+            lightContainer.classList.remove('active-red', 'active-yellow', 'active-green');
+            if (color === 'red') {
+                lightContainer.classList.add('active-red');
+            } else if (color === 'yellow') {
+                lightContainer.classList.add('active-yellow');
+            } else {
+                lightContainer.classList.add('active-green');
+            }
         }
 
         function clampByte(value) {
@@ -330,6 +567,8 @@
             currentCommands.setMaxPower = clampedValue;
             setMaxPowerInput.value = clampedValue;
             setMaxPowerSlider.value = clampedValue;
+            setMaxPowerValue.textContent = clampedValue;
+            setMaxPowerSlider.style.setProperty('--pct', `${(clampedValue / 255) * 100}%`);
         }
 
         async function sendCommandPayload(sendResetPulse) {
@@ -393,6 +632,7 @@
             return day + '/' + month + '/' + year + ' at ' + hours + ':' + minutes + ':' + seconds;
         }
 
+        initPlots();
         syncMaxPowerControls(0);
     </script>
 </body>

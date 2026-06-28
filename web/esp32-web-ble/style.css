@@ -117,6 +117,120 @@ h2 {
     gap: 14px;
 }
 
+.graph-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.graph-card {
+    position: relative;
+    padding: 14px;
+    border-radius: 18px;
+    background: var(--panel-strong);
+    border: 1px solid var(--line);
+}
+
+.graph-card::after {
+    content: attr(data-plot-status);
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(29, 26, 22, 0.08);
+}
+
+.graph-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.graph-reading {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 700;
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+}
+
+.mini-uplot {
+    width: 100%;
+    height: 92px;
+    display: block;
+    margin-top: 8px;
+}
+
+.mini-uplot .uplot {
+    font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+}
+
+.mini-uplot .u-axis,
+.mini-uplot .u-label {
+    color: rgba(29, 26, 22, 0.65);
+}
+
+.state-grid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.state-card {
+    padding: 14px;
+    border-radius: 18px;
+    background: var(--panel-strong);
+    border: 1px solid var(--line);
+}
+
+.lights {
+    margin: 8px 0;
+    display: inline-flex;
+    gap: 8px;
+}
+
+.light {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    opacity: 0.25;
+    box-shadow: inset 0 0 0 1px rgba(29, 26, 22, 0.12);
+}
+
+.light-red {
+    background: #ce3d38;
+}
+
+.light-yellow {
+    background: #d9ab2f;
+}
+
+.light-green {
+    background: #2f9f56;
+}
+
+.lights.active-red .light-red,
+.lights.active-yellow .light-yellow,
+.lights.active-green .light-green {
+    opacity: 1;
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.04), 0 0 16px currentColor;
+}
+
+.state-value {
+    margin: 0;
+    font-size: 1.04rem;
+    font-weight: 700;
+}
+
 .metric-card {
     padding: 18px;
     border-radius: 18px;
@@ -214,6 +328,17 @@ input[type="number"] {
 input[type="range"] {
     flex: 1;
     accent-color: var(--accent);
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--pct, 0%), #d8cec0 var(--pct, 0%), #d8cec0 100%);
+}
+
+.slider-value {
+    margin: 0;
+    min-width: 44px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--accent);
 }
 
 button {
@@ -300,6 +425,10 @@ button:active {
     background: var(--accent);
 }
 
+.toggle-warn input:checked + .toggle-slider {
+    background: var(--warn);
+}
+
 .toggle input:checked + .toggle-slider::before {
     transform: translateX(26px);
 }
@@ -311,6 +440,10 @@ button:active {
     }
 
     .telemetry-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .state-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -336,6 +469,11 @@ button:active {
     }
 
     .telemetry-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .graph-grid,
+    .state-grid {
         grid-template-columns: 1fr;
     }
 
